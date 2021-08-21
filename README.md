@@ -51,7 +51,7 @@ com.vincent presents
  >* Easy KeyBindings
  
 
-#bugs
+# bugs
    >* Line deleting 
    > * appending a new line
 
