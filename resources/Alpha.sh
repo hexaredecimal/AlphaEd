@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 
-buffer=""  # File contents
+buffer=() # File contents
 line=0 # Currently selected line (0 means the buffer is empty)
 base=1 # Top-most line shown
 file= # Currently addressed file
 message="AlphaEd: (press 'q' to quit)." # Feedback text in the status bar
 modified=false # Tracking whether a file was modified
+
+msg="mod:$modified\tlines:${#buffer}" 
 
 #shopt -s extglob # Ensure advanced pattern matching is available
 #shopt -s checkwinsize; (:) # Enable and then trigger a terminal size refresh
@@ -15,6 +17,8 @@ trap quit INT
 
 ## set home path
 HOME=/storage/emulated/0/
+
+
 
 
 
@@ -37,20 +41,32 @@ slice()
 
 set_buffer_file() {
    # bind 'set disable-completion off' 2>/dev/null # Enable completion
-    printf '\e[?25h' # Enable cursor
-    if read -rei "$1$file" -p "${BED_FILE_PROMPT:=Path($HOME):}" file; then
+    printf '\e[?25h' # Enable curso
+    printf "\n%s" "${BED_FILE_PROMPT:=Select buffer path($HOME):}" 
+    if read -r file; then
         file=$HOME/$file
         modified=true
+        msg="mod:$modified\tlines:${#buffer[@]}" 
     fi
     bind 'set disable-completion on' 2>/dev/null
 }
 
 read_buffer() {
     set_buffer_file "$1" # Update target file (pass on default if present)
-    mapfile -t -O 1 buffer <"$file" # Read file into an array
-    if [[ "${buffer[1]}" ]]; then # Ensure that something was actually read into the file
+  #  mapfile -t -O 1 buffer <"$file" # Read file into an array
+    buffer=("")
+ #   buffer=( "$(cat $file)"  )
+    IFS=$'\n' 
+    while read ln
+    do
+       buffer+=( "$ln" )
+    done  < $file
+ 
+    if [[ "${#buffer[1]}" -gt 0  ]]
+       then # Ensure that something was actually read into the file
         line=1 # Indicate that we have a buffer loaded
         modified=false
+        msg="mod:$modified\tlines:${#buffer[@]}" 
         message="Read ${#buffer[@]} lines from '$file'"
     else
         message="'$file' is empty"
@@ -63,6 +79,7 @@ write_buffer() {
         echo $ln >>"$file"
     done
     modified=false
+    msg="mod:modified\tlines:${#buffer[@]}"  
     message="Wrote ${#buffer[@]} lines to '$file'"
 }
 
@@ -90,6 +107,7 @@ new_file()
    file=""
    message="buffer cleaned" 
    modified=false
+   msg="mod:$modified\tlines:${#buffer[@]}" 
    line=0 #reset line to null
    redraw
 }
@@ -98,19 +116,30 @@ edit_line() {
     ((line == 0)) && return # If the line is not possible, do nothing
     printf '\e[?25h\e[%sH' "$((line + 2 - base))" # Reset cursor position and enable cursor
     printf "%4s " $line
-    read -r REPLY  # Present editable line
    
+    
+   IFS=$'\0' 
+   read -r REPLY # Present editable line
+   
+        
     if [[ $REPLY != ${buffer[line]} ]]; then # If the line is changed, update and inform
         buffer[line]=$(echo $REPLY)
         modified=true
+        msg="mod:$modified\tlines:${#buffer[@]}" 
     fi
+    
+   down
+    
 }
 
 new_line() {
     #buffer=$(("" "${buffer[@]:1:line}" "" "${buffer[@]:line+1}"))
-    #buffer=$(("" "$(slice 1 $(expr $line))" "" "$(slice $(expr $line) $((line + 2)))" ))
-    buffer=$(  printf "%s\n" ${buffer[@]})
+   
+    buffer=$(  printf "%s\n" ${buffer[@]}  )
+  
+    
    # unset 'buffer[0]'
+   msg="mod:$modified\tlines:${#buffer[@]}" 
     modified=true
 }
 
@@ -122,17 +151,20 @@ append_line() {
 }
 
 delete_line() {
-    buffer=("" "${buffer[@]:1:line-1}" "${buffer[@]:line+1}")
-    unset 'buffer[0]'
+    #buffer=("" "${buffer[@]:1:line-1}" "${buffer[@]:line+1}")
+    buffer[$line]=""
+    
     ((line > ${#buffer[@]})) && up
     modified=true
+    msg="mod:$modified\tlines:${#buffer[@]}" 
 }
 
 quit() {
     if [[ "$modified" == "true" ]]; then
         while :; do
-            read -rsN1 -p "Buffer modified, save before close? [Y/n/c]" choice
-            case "$choice" in
+            printf "\n%s" "Buffer modified, save before close? [Y/n/c]" 
+             read choice 
+              case "$choice" in
             Y|y) write_buffer; die;;
             N|n) die;;
             C|c) message="Quit canceled"; break;;
@@ -185,6 +217,8 @@ die() {
     exit 
 }
 
+
+
 redraw() {
     (printf '\e[H\e[?25l\e[100m%*s\r %s \e[41;30m %s \e[0;100m Line:%s Words:%s\e[m' \
         "$COLUMNS" "$message" "${BED_ICON:=∆ }" \
@@ -198,10 +232,11 @@ redraw() {
         ((i != line)) && printf '\e[90m' # Fade line number if not selected
         ((i > ${#buffer[@]})) && printf '\n\e[K   ~\e[m' || \
             printf '\n\e[K%4s\e[m %s' "$i" "${buffer[i]}" # Print the line
+            
    	((i++))
     done
     printf '\n' # Add final newline to seperate commandline
-
+    printf "$msg" 
     
 }
 
@@ -211,7 +246,7 @@ key() {
     ${BED_KEY_PGDN:=$'\E[6~'}) page_down;;
  
     ${BED_KEY_UP:=w}) up;;
-    ${BED_KEY_DOWN:=s}) down;;
+    ${BED_KEY_DOWN:=s }) down;;
     ${BED_KEY_HELP:=h}) get_help;; # Open the manpage (breaks stuff)
     ${BED_KEY_QUIT:=q}) quit;;
     ${BED_KEY_FILE:=f}) set_buffer_file;;
