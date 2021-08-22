@@ -49,14 +49,33 @@ com.vincent presents
 # Features
  >* Console based
  >* Easy KeyBindings
+ >* Zero dependencies 
+ >* Ansi escape code based
  
 
 # bugs
-   >* Line deleting 
-   > * appending a new line
+   >* Line deleting - **FIXED**
+   > * appending a new line - **FIXED**
+   > * creating a new line - **FIXED**
+   > * exiting - **FIXED**
 
-
+# TODO
+  > * Syntax highlighting
+  
 
 #### note 
 
 > The editor is entirely written in shell script, it is slow on some devices as it depends on processes for execution, some processes start slowly.
+
+# Build
+> * AlphaEd only depends on sh, which is by default, installed on most Android devices.
+> * The editor builds using **c4droid** mobile ide
+> * **c4droid** uses the **tcc** *(Tiny c compiler)* compiler for Android. As a result, the output executable has a smaller size
+> ### build instructions
+>> * Have **c4droid** installed
+>> * clone this repository and unzip the folder
+>> * open the **Alpha.c** in c4droid 
+>> * compile and run
+>> * if successful, build apk by exporting.
+>> * if fails create an issue and put the resulting error message
+
