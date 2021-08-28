@@ -6,14 +6,18 @@ base=1 # Top-most line shown
 file= # Currently addressed file
 message="AlphaEd: (press 'q' to quit)." # Feedback text in the status bar
 modified=false # Tracking whether a file was modified
-
-msg="mod:$modified\tlines:${#buffer}" 
-
-#shopt -s extglob # Ensure advanced pattern matching is available
-#shopt -s checkwinsize; (:) # Enable and then trigger a terminal size refresh
+mod=$"\e[41;30m${modified:0:1}" 
+lines=$"\e[45;30m${#buffer}" 
+key="n" 
+ _error=
+last_key="\e[46;30m$key" 
+error="\e[41;30m" 
 trap redraw WINCH ALRM # Attach WINCH and ALRM to redraw the screen
 trap die EXIT HUP USR1 # Attach most exit codes to cleanup and exit
 trap quit INT
+
+
+
 
 ## set home path
 HOME=/storage/emulated/0/
@@ -22,36 +26,23 @@ HOME=/storage/emulated/0/
 
 
 
-slice()
-{
-	start=$1
-	end=$2
-	_ret=()
-	
-	while [ $((start < end)) -eq 1 ]
-	  do
-	      _ret+=$(echo ${buffer[$(expr start)]} ) && ((start++))
-	  done
-	  
-	  echo ${_ret[@]}
-}
-
-
-
 
 set_buffer_file() {
+	_error=
    # bind 'set disable-completion off' 2>/dev/null # Enable completion
     printf '\e[?25h' # Enable curso
     printf "\n%s" "${BED_FILE_PROMPT:=Select buffer path($HOME):}" 
     if read -r file; then
         file=$HOME/$file
-        modified=true
-        msg="mod:$modified\tlines:${#buffer[@]}" 
+        mod=$"\e[41;30m${modified:0:1}" 
+       lines=$"\e[45;30m${#buffer}" 
+
     fi
     bind 'set disable-completion on' 2>/dev/null
 }
 
 read_buffer() {
+	_error=
     set_buffer_file "$1" # Update target file (pass on default if present)
   #  mapfile -t -O 1 buffer <"$file" # Read file into an array
     buffer=("")
@@ -62,11 +53,12 @@ read_buffer() {
        buffer+=( "$ln" )
     done  < $file
  
-    if [[ "${#buffer[1]}" -gt 0  ]]
+    if [[ "${#buffer}" -gt 0  ]]
        then # Ensure that something was actually read into the file
         line=1 # Indicate that we have a buffer loaded
         modified=false
-        msg="mod:$modified\tlines:${#buffer[@]}" 
+        mod=$"\e[41;30m${modified:0:1}" 
+        lines=$"\e[45;30m${#buffer}" 
         message="Read ${#buffer[@]} lines from '$file'"
     else
         message="'$file' is empty"
@@ -74,12 +66,14 @@ read_buffer() {
 }
 
 write_buffer() {
+	_error=
     true >"$file" # Set the file to an empty text file
     for ln in ${buffer[@]} ; do # Write in the buffer to the file
         echo $ln >>"$file"
     done
-    modified=false
-    msg="mod:modified\tlines:${#buffer[@]}"  
+        modified=false
+        mod=$"\e[41;30m${modified:0:1}" 
+        lines=$"\e[45;30m${#buffer}" 
     message="Wrote ${#buffer[@]} lines to '$file'"
 }
 
@@ -96,6 +90,8 @@ get_help() {
 }
 
 cmd_line() {
+	_error=
+	printf "\n" 
     cd #goto home
     sh #create a command line 
 }
@@ -103,16 +99,19 @@ cmd_line() {
 
 new_file()
 {
+	_error=
    buffer=()
    file=""
    message="buffer cleaned" 
    modified=false
-   msg="mod:$modified\tlines:${#buffer[@]}" 
+        mod=$"\e[41;30m${modified:0:1}" 
+        lines=$"\e[45;30m${#buffer}"  
    line=0 #reset line to null
    redraw
 }
 
 edit_line() {
+	 _error=
     ((line == 0)) && return # If the line is not possible, do nothing
     printf '\e[?25h\e[%sH' "$((line + 2 - base))" # Reset cursor position and enable cursor
     printf "%4s " $line
@@ -124,7 +123,9 @@ edit_line() {
         
     if [[ $REPLY != ${buffer[line]} ]]; then # If the line is changed, update and inform
         buffer[line]=$(echo $REPLY)
-        modified=true
+        modified=true 
+        mod=$"\e[42;30m${modified:0:1}" 
+        lines=$"\e[45;30m${#buffer}" 
         msg="mod:$modified\tlines:${#buffer[@]}" 
     fi
     
@@ -133,17 +134,20 @@ edit_line() {
 }
 
 new_line() {
+	_error=
     #buffer=$(("" "${buffer[@]:1:line}" "" "${buffer[@]:line+1}"))
    
     buffer=$(  printf "%s\n" ${buffer[@]}  )
   
     
-   # unset 'buffer[0]'
-   msg="mod:$modified\tlines:${#buffer[@]}" 
     modified=true
+   mod=$"\e[42;30m${modified:0:1}" 
+    lines=$"\e[45;30m${#buffer}" 
+    
 }
 
 append_line() {
+	_error=
     new_line
     down
     redraw
@@ -151,12 +155,14 @@ append_line() {
 }
 
 delete_line() {
+	_error=
     #buffer=("" "${buffer[@]:1:line-1}" "${buffer[@]:line+1}")
     buffer[$line]=""
     
     ((line > ${#buffer[@]})) && up
     modified=true
-    msg="mod:$modified\tlines:${#buffer[@]}" 
+    mod=$"\e[42;30m${modified:0:1}" 
+    lines=$"\e[45;30m${#buffer}" 
 }
 
 quit() {
@@ -181,7 +187,8 @@ quit() {
 
 up() {
     _i=0
-   # for ((i = 0; i < ${1:-1}; i++));
+   
+   _error=
    while [ $(( _i < ${1:-1})) -eq 1 ]
     do
         ((line > 1)) && ((line--)) # As long as we can keep going up, go up
@@ -193,10 +200,12 @@ up() {
 
 page_up() {
     up $((LINES - 3))
+    _error=
 }
 
 down() {
-   # for ((i = 0; i < ${1:-1}; i++));
+   _error=
+   
    j=0
    while [ $(( j < ${1:-1} )) -eq 1 ] 
    do
@@ -208,6 +217,8 @@ down() {
 
 page_down() {
     down $((LINES - 3))
+    
+    _error=
 }
 
 die() {
@@ -224,42 +235,64 @@ redraw() {
         "$COLUMNS" "$message" "${BED_ICON:=∆ }" \
         "$(basename "$file")" "$line" "${#buffer[line]}") # Status line, among others
    
-    # for ((i = base; i - base < LINES - 2; i++)); 
-    i=$base 
+    
+       i=$base
     
     while [ $((i - base)) -lt $((LINES - 2)) ]
     do # Iterate over shown lines
         ((i != line)) && printf '\e[90m' # Fade line number if not selected
         ((i > ${#buffer[@]})) && printf '\n\e[K   ~\e[m' || \
-            printf '\n\e[K%4s\e[m %s' "$i" "${buffer[i]}" # Print the line
+          printf '\n\e[K%4s\e[m %s' "$i" "${buffer[i]}" # Print the line
+         
             
    	((i++))
     done
     printf '\n' # Add final newline to seperate commandline
-    printf "$msg" 
+    printf "\t $mod \e[0m"  
+    printf " $lines \e[0m $last_key" 
+    printf '\e[0m' 
+    printf " $_error"
+    printf '\e[0m  '  
+     #printf "$msg" 
     
 }
 
+
+
 key() {
-    case "$1" in
-    ${BED_KEY_PGUP:=$'\E[5~'}) page_up;;
-    ${BED_KEY_PGDN:=$'\E[6~'}) page_down;;
+	 key="$1" 
+	 last_key="\e[46;30m$key"
+	 
+	
+   case "$1" in
+    ${ALPHA_KEY_PGUP:=$'\E[5~'}) page_up;;
+    ${ALPHA_KEY_PGDN:=$'\E[6~'}) page_down;;
  
-    ${BED_KEY_UP:=w}) up;;
-    ${BED_KEY_DOWN:=s }) down;;
-    ${BED_KEY_HELP:=h}) get_help;; # Open the manpage (breaks stuff)
-    ${BED_KEY_QUIT:=q}) quit;;
-    ${BED_KEY_FILE:=f}) set_buffer_file;;
-    ${BED_KEY_READ:=r}) read_buffer;;
-    ${BED_KEY_WRITE:=g}) write_buffer;;
-    ${BED_KEY_EDIT:=e}|'') edit_line;;
-    ${BED_KEY_APPEND:=a}) append_line;;
-    ${BED_KEY_DELETE:=d}) delete_line;;
-    ${BED_KEY_NEW:=n}) new_line;;
-    ${BED_KEY_CMD:=c}) cmd_line;;
-    ${BED_KEY_NEW_FILE:=m}) 
+    ${ALPHA_ARROW_UP:=$'\E[A'}) up;;
+    ${ALPHA_ARROW_DOWN:=$'\E[B'}) down ;;
+    
+    ${ALPHA_UP:=w}) up;;
+    ${ALPHA_DOWN:=s}) down;;
+    ${ALPHA_HELP:=h}) get_help;; 
+    ${ALPHA_QUIT:=q}) quit;;
+    ${ALPHA_KEY_NEW_FILE:=f}) set_buffer_file;;
+    ${ALPHA_KEY_READ:=r}) read_buffer;;
+    ${ALPHA_WRITE:=g}) write_buffer;;
+    ${ALPHA_KEY_EDIT:=e}|'') edit_line;;
+    ${ALPHA_KEY_APPEND:=a}) append_line;;
+    ${ALPHA_KEY_DELETE:=d}) delete_line;;
+    ${ALPHA_KEY_NEW:=n}) new_line;;
+    ${ALPHA_KEY_CMD:=c}) cmd_line;;
+    ${ALPHA_KEY_NEW_FILE:=m}) 
       new_file;;
+     ${ALPHA_KEY_ERROR:=*})
+        make_key_error $1 ;;
     esac
+}
+
+make_key_error()
+{
+    _error="\e[0m\e[41;30m[invalid key binding:[$1] found]\e[0m" 
 }
 
 main() {
@@ -271,7 +304,7 @@ main() {
     while redraw; do # Keep redrawing when we can (allow WINCH signals to get handled)
         k=()
         i=1
-        if read -rsN1 -t"${BED_REFRESH_TIMEOUT:=0.1}" k[0]; then # Check for ready input
+        if read -rsN1 -t"${ALPHA_REFRESH_TIMEOUT:=0.1}" k[0]; then # Check for ready input
             while read -rsN1 -t0.0001 k[$i]; do ((i++)); done # Multibyte hack
             key "$(printf '%s' "${k[@]}")" # Handle keypress event
         fi
